@@ -64,7 +64,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # CORS middleware configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:8000", "http://localhost:8001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -90,27 +90,36 @@ async def transcribe_audio(file: UploadFile):
         logger.warning("No audio file provided in request")
         raise HTTPException(status_code=400, detail="No audio file provided")
     
+    # Log file details
+    logger.info(f"File details - Name: {file.filename}, Content-Type: {file.content_type}")
+    
     # Check file extension and content type
     file_ext = os.path.splitext(file.filename)[1].lower()
     content_type = file.content_type.lower() if file.content_type else ''
     
+    # If no extension but content type is wav, set extension
+    if not file_ext and content_type == 'audio/wav':
+        file_ext = '.wav'
+        logger.info("No extension found but content-type is audio/wav, setting extension to .wav")
+    
     allowed_extensions = {
         '.mp3': ['audio/mpeg', 'audio/mp3'],
-        '.wav': ['audio/wav', 'audio/wave', 'audio/x-wav'],
-        '.m4a': ['audio/m4a', 'audio/mp4'],
-        '.ogg': ['audio/ogg'],
-        '.flac': ['audio/flac', 'audio/x-flac']
+        '.wav': ['audio/wav', 'audio/wave', 'audio/x-wav', 'audio/webm'],
+        '.m4a': ['audio/m4a', 'audio/mp4', 'audio/x-m4a'],
+        '.ogg': ['audio/ogg', 'audio/vorbis'],
+        '.flac': ['audio/flac', 'audio/x-flac'],
+        '': ['audio/wav', 'audio/webm']  # For recorded audio blobs
     }
     
     if file_ext not in allowed_extensions:
         logger.warning(f"Unsupported file extension: {file_ext}")
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported file extension: {file_ext}. Supported formats: {', '.join(allowed_extensions.keys())}"
+            detail=f"Unsupported file extension: {file_ext}. Supported formats: MP3, WAV, M4A, OGG, FLAC"
         )
     
     if content_type and not any(ct in content_type for ct in allowed_extensions[file_ext]):
-        logger.warning(f"Unexpected content type {content_type} for extension {file_ext}")
+        logger.warning(f"Content type {content_type} might not match extension {file_ext}, but proceeding anyway")
     
     # Check file size (1GB limit)
     file_size = 0

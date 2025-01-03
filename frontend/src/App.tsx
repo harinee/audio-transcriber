@@ -116,7 +116,9 @@ Please try:
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-        await handleAudioUpload(audioBlob);
+        // Create a File object from Blob to ensure proper extension
+        const audioFile = new File([audioBlob], 'recording.wav', { type: 'audio/wav' });
+        await handleAudioUpload(audioFile);
       };
       setIsRecording(false);
     }
@@ -179,7 +181,14 @@ Please try:
 
     try {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', 'http://localhost:8000/transcribe');
+      xhr.open('POST', 'http://localhost:8001/transcribe');
+      
+      // Log request details
+      console.log('Sending transcription request:', {
+        url: 'http://localhost:8001/transcribe',
+        fileType: audioBlob.type,
+        fileSize: audioBlob.size
+      });
       
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) {
@@ -192,12 +201,21 @@ Please try:
         xhr.responseType = 'json';
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {
+            console.log('Transcription successful:', xhr.response);
             resolve(xhr.response as TranscriptionResponse);
           } else {
-            reject(new Error('Upload failed'));
+            console.error('Transcription failed:', {
+              status: xhr.status,
+              response: xhr.response,
+              statusText: xhr.statusText
+            });
+            reject(new Error(`Upload failed: ${xhr.statusText}`));
           }
         };
-        xhr.onerror = () => reject(new Error('Upload failed'));
+        xhr.onerror = () => {
+          console.error('Network error during transcription');
+          reject(new Error('Network error during upload'));
+        };
         xhr.send(formData);
       });
       setTranscription(result.text);
@@ -226,7 +244,7 @@ Please try:
       } else if (error instanceof Error && error.message.includes('404')) {
         errorMessage += `Possible cause: Backend server not running
         
-Please ensure the backend server is running at http://localhost:8000`;
+Please ensure the backend server is running at http://localhost:8001`;
       } else {
         errorMessage += `Possible causes:
 - Backend server not running

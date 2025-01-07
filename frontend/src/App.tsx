@@ -181,11 +181,11 @@ Please try:
 
     try {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', 'http://localhost:8001/transcribe');
+      xhr.open('POST', 'http://localhost:8000/transcribe');
       
       // Log request details
       console.log('Sending transcription request:', {
-        url: 'http://localhost:8001/transcribe',
+        url: 'http://localhost:8000/transcribe',
         fileType: audioBlob.type,
         fileSize: audioBlob.size
       });
@@ -228,33 +228,68 @@ Please try:
       });
     } catch (error) {
       console.error('Error during transcription:', error);
-      let errorMessage = 'Transcription failed\n\n';
       
-      if (!navigator.onLine) {
-        errorMessage += `Possible cause: No internet connection
-        
-Please check your internet connection and try again.`;
-      } else if (error instanceof Error && error.message.includes('413')) {
-        errorMessage += `Possible cause: File too large
-        
-Please try:
+      let errorResponse;
+      try {
+        errorResponse = await (error instanceof Error && error.message === 'Upload failed' 
+          ? Promise.reject(error)
+          : (error as Response).json());
+      } catch {
+        if (!navigator.onLine) {
+          alert('Network error: Please check your internet connection and try again.');
+          return;
+        }
+        alert('Failed to connect to the server. Please ensure the backend server is running.');
+        return;
+      }
+
+      const errorCode = errorResponse?.error_code;
+      let errorMessage = errorResponse?.detail || 'Transcription failed';
+
+      switch (errorCode) {
+        case 'NO_FILE_ERROR':
+          errorMessage = 'Please select an audio file to transcribe.';
+          break;
+        case 'UNSUPPORTED_FORMAT':
+          errorMessage = 'This file format is not supported. Please use MP3, WAV, M4A, OGG, or FLAC files.';
+          break;
+        case 'FILE_TOO_LARGE':
+          errorMessage = `File is too large (max 1GB).
+          
+Try:
 1. Using a smaller audio file
 2. Recording a shorter audio clip
 3. Compressing the audio file`;
-      } else if (error instanceof Error && error.message.includes('404')) {
-        errorMessage += `Possible cause: Backend server not running
-        
-Please ensure the backend server is running at http://localhost:8001`;
-      } else {
-        errorMessage += `Possible causes:
-- Backend server not running
-- Audio file format not supported
-- File is corrupted
-
+          break;
+        case 'NO_SPEECH_DETECTED':
+          errorMessage = 'No speech was detected in the audio file. Please ensure the file contains speech.';
+          break;
+        case 'FILE_READ_ERROR':
+          errorMessage = 'Failed to read the audio file. The file might be corrupted.';
+          break;
+        case 'TRANSCRIPTION_ERROR':
+          errorMessage = `Failed to transcribe audio.
+          
+Please ensure:
+1. The file contains valid audio content
+2. The audio is clear and audible
+3. The file is not corrupted`;
+          break;
+        case 'MODEL_INITIALIZATION_ERROR':
+          errorMessage = 'The transcription service is temporarily unavailable. Please try again later.';
+          break;
+        case 'INTERNAL_SERVER_ERROR':
+          errorMessage = `An unexpected error occurred (ID: ${errorResponse.error_id}).
+          
+Please try again later or report this error ID if the problem persists.`;
+          break;
+        default:
+          errorMessage = `Transcription failed: ${errorMessage}
+          
 Please try:
 1. Using a different audio file
-2. Converting the file to a common format (MP3, WAV)
-3. Checking if the backend server is running`;
+2. Converting to a common format (MP3, WAV)
+3. Checking your connection`;
       }
       
       alert(errorMessage);
